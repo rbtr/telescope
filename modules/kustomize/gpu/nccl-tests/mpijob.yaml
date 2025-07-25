@@ -15,12 +15,13 @@ spec:
         metadata:
           labels:
             app: nccl-tests
+            component: launcher
         spec:
           restartPolicy: OnFailure
           containers:
-            - image: ghcr.io/azure/aks-rdma-infiniband/nccl-tests:latest
+            - name: nccl-launcher
+              image: ghcr.io/azure/aks-rdma-infiniband/nccl-tests:latest
               imagePullPolicy: IfNotPresent
-              name: nccl
               env:
                 - name: OMPI_ALLOW_RUN_AS_ROOT
                   value: "1"
@@ -28,8 +29,6 @@ spec:
                   value: "1"
                 - name: NUMBER_OF_PROCESSES
                   value: "16"
-                - name: NCCL_NET_GDR_LEVEL
-                  value: "SYS"
               command:
                 - /bin/bash
                 - -c
@@ -40,27 +39,27 @@ spec:
                   mpirun \
                     -np ${NUMBER_OF_PROCESSES} \
                     -bind-to none \
-                    -x NCCL_NET_GDR_LEVEL=${NCCL_NET_GDR_LEVEL} \
+                    -x NCCL_NET_GDR_LEVEL="SYS" \
                     -x NCCL_TOPO_FILE=/opt/nvidia-topology/topo.xml \
                     -x CUDA_DEVICE_ORDER=PCI_BUS_ID \
-                      /opt/nccl_tests/build/all_reduce_perf \
-                        -c 0 \
-                        -b 8 \
-                        -e 16G \
-                        -f 4 \
-                        -g 1 \
-                        -n 10
+                    /opt/nccl_tests/build/all_reduce_perf \
+                      -c 0 \
+                      -b 8 \
+                      -e 16G \
+                      -f 2 \
+                      -g 1
     Worker:
       replicas: 2
       template:
         metadata:
           labels:
             app: nccl-tests
+            component: worker
         spec:
           containers:
-            - image: ghcr.io/azure/aks-rdma-infiniband/nccl-tests:latest
+            - name: nccl-worker
+              image: ghcr.io/azure/aks-rdma-infiniband/nccl-tests:latest
               imagePullPolicy: IfNotPresent
-              name: nccl
               resources:
                 limits:
                   nvidia.com/gpu: 8
@@ -70,12 +69,20 @@ spec:
                   rdma/shared_ib: 1
               securityContext:
                 capabilities:
-                  add: 
-                  - "IPC_LOCK"
+                  add:
+                    - "IPC_LOCK"
               volumeMounts:
                 - name: shm
                   mountPath: /dev/shm
+                - name: nvidia-topology
+                  mountPath: /opt/nvidia-topology
           volumes:
             - name: shm
               emptyDir:
                 medium: Memory
+            - name: nvidia-topology
+              configMap:
+                name: nvidia-topology
+                items:
+                  - key: topo.xml
+                    path: topo.xml
