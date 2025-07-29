@@ -1,5 +1,6 @@
 steps:
   - script: |
+      set -eo pipefail
       PYTHONPATH=$PYTHONPATH:$(pwd) python3 $PYTHON_SCRIPT_FILE collect \
         --result_dir $RESULT_DIR \
         --run_url $RUN_URL \

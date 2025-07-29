@@ -1,6 +1,7 @@
 apiVersion: kubeflow.org/v2beta1
 kind: MPIJob
 metadata:
+  namespace: default
   name: nccl-tests
   labels:
     app: nccl-tests

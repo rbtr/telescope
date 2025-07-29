@@ -4,7 +4,7 @@ import json
 import re
 from datetime import datetime, timezone
 from typing import Dict, Any
-import yaml
+import time
 import requests
 from utils.logger_config import get_logger, setup_logging
 from clients.kubernetes_client import KubernetesClient, client
@@ -13,6 +13,7 @@ from clients.kubernetes_client import KubernetesClient, client
 setup_logging()
 logger = get_logger(__name__)
 KUBERNETES_CLIENT = KubernetesClient()
+
 
 def _install_operator(
     chart_version: str,
@@ -37,7 +38,7 @@ def _install_operator(
     subprocess.run(["helm", "repo", "update"], check=True)
 
     # Build Helm install command
-    value_file = f"{config_dir}/gpu/{operator_name}/values.yaml"
+    value_file = f"{config_dir}/{operator_name}/values.yaml"
     command = [
         "helm",
         "install",
@@ -116,28 +117,20 @@ def install_network_operator(
         timeout_in_minutes=5,
     )
 
-    nfd_install_command = [
-        "kubectl",
-        "apply",
-        "-f",
-        f"{config_dir}/gpu/network-operator/node-feature-discovery.yaml",
-    ]
-    logger.info(f"Executing: {' '.join(nfd_install_command)}")
-    subprocess.run(nfd_install_command, check=True)
-    nic_install_command = [
-        "kubectl",
-        "apply",
-        "-f",
-        f"{config_dir}/gpu/network-operator/nic-cluster-policy.yaml",
-    ]
-    logger.info(f"Executing: {' '.join(nic_install_command)}")
-    subprocess.run(nic_install_command, check=True)
-
+    nfd_file = f"{config_dir}/network-operator/node-feature-discovery.yaml"
+    KUBERNETES_CLIENT.apply_manifest_from_file(nfd_file)
+    nic_file = f"{config_dir}/network-operator/nic-cluster-policy.yaml"
+    KUBERNETES_CLIENT.apply_manifest_from_file(nic_file)
+    time.sleep(15)
     KUBERNETES_CLIENT.wait_for_labeled_pods_ready(
-        label_selector="nvidia.com/ofed-driver=", namespace="network-operator", timeout_in_minutes=5
+        label_selector="nvidia.com/ofed-driver=",
+        namespace="network-operator",
+        timeout_in_minutes=5,
     )
     KUBERNETES_CLIENT.wait_for_labeled_pods_ready(
-        label_selector="app=rdma-shared-dp", namespace="network-operator", timeout_in_minutes=5
+        label_selector="app=rdma-shared-dp",
+        namespace="network-operator",
+        timeout_in_minutes=5,
     )
     _verify_rdma()
 
@@ -156,6 +149,7 @@ def install_gpu_operator(
     _install_operator(
         chart_version=chart_version, operator_name="gpu-operator", config_dir=config_dir
     )
+    time.sleep(15)
     KUBERNETES_CLIENT.wait_for_labeled_pods_ready(
         label_selector="app.kubernetes.io/managed-by=gpu-operator",
         namespace="gpu-operator",
@@ -191,6 +185,7 @@ def install_mpi_operator(
     ]
     logger.info(f"Executing: {' '.join(install_command)}")
     subprocess.run(install_command, check=True)
+    time.sleep(15)
     KUBERNETES_CLIENT.wait_for_labeled_pods_ready(
         label_selector="app.kubernetes.io/name=mpi-operator",
         namespace="mpi-operator",
@@ -277,15 +272,10 @@ def execute(
     """
     if provider.lower() == "azure":
         _create_topology_configmap(vm_size=vm_size)
-    apply_command = [
-        "kubectl",
-        "apply",
-        "-f",
-        f"{config_dir}/gpu/nccl-tests/mpijob.yaml",
-    ]
-    logger.info(f"Executing: {' '.join(apply_command)}")
-    subprocess.run(apply_command, check=True)
 
+    nccl_file = f"{config_dir}/nccl-tests/mpijob.yaml"
+    KUBERNETES_CLIENT.apply_manifest_from_file(nccl_file)
+    time.sleep(15)
     pods = KUBERNETES_CLIENT.wait_for_pods_completed(
         label_selector="component=launcher"
     )
