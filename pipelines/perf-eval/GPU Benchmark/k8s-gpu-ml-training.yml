@@ -1,0 +1,23 @@
+trigger: none
+variables:
+  SCENARIO_TYPE: perf-eval
+  SCENARIO_NAME: k8s-gpu-ml-training
+
+stages:
+  - stage: azure_ND_A100_gpu_test
+    dependsOn: []
+    jobs:
+      - template: /jobs/competitive-test.yml
+        parameters:
+          cloud: azure
+          regions:
+            - eastus
+          topology: k8s-gpu-ml-training
+          engine: nccl
+          matrix:
+            ndv4_node_pool:
+              vm_size: ndv4
+          max_parallel: 1
+          credential_type: service_connection
+          ssh_key_enabled: false
+          timeout_in_minutes: 180
